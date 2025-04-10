@@ -37,6 +37,17 @@ class ProxyManager:
         Returns:
             Dict chứa thông tin proxy hoặc None nếu có lỗi
         """
+        # Kiểm tra thời gian đã trôi qua kể từ lần đổi proxy cuối
+        current_time = time.time()
+        time_since_last_rotation = current_time - self.last_rotation_time
+        min_interval = self.proxy_rotation_interval[0]
+        
+        # Nếu chưa đủ thời gian tối thiểu, trả về None và ghi log
+        if time_since_last_rotation < min_interval:
+            remaining_time = min_interval - time_since_last_rotation
+            logger.error(f"Lỗi khi lấy proxy: Con {int(remaining_time)}s moi co the doi proxy")
+            return None
+            
         try:
             response = requests.get(self.proxy_url, timeout=10)
             content = response.text
@@ -57,6 +68,9 @@ class ProxyManager:
             data = json.loads(json_str)
             
             if data.get('status') == 100:
+                # Cập nhật thời gian đổi proxy cuối cùng
+                self.last_rotation_time = current_time
+                
                 logger.info(f"Proxy mới nhận được: {data.get('proxyhttp')} (hết hạn sau {data.get('message', '').split()[-1] if 'message' in data else 'N/A'})")
                 
                 # Phân tích proxyhttp string: ip:port:username:password
@@ -134,10 +148,26 @@ class ProxyManager:
                 with self.proxy_lock:
                     logger.info("Đang thực hiện đổi proxy tự động...")
                     self.current_proxy = self.get_new_proxy()
-                    self.last_rotation_time = now
+                    # Không cập nhật last_rotation_time ở đây vì đã cập nhật trong get_new_proxy nếu thành công
                     self.force_rotation = False
             
             time.sleep(5)
+    
+    def can_rotate_proxy(self):
+        """
+        Kiểm tra xem có thể đổi proxy ngay lúc này không
+        
+        Returns:
+            (bool, int): Tuple chứa (có thể đổi không, thời gian còn lại phải đợi)
+        """
+        current_time = time.time()
+        time_since_last_rotation = current_time - self.last_rotation_time
+        min_interval = self.proxy_rotation_interval[0]
+        
+        if time_since_last_rotation < min_interval:
+            remaining_time = min_interval - time_since_last_rotation
+            return False, int(remaining_time)
+        return True, 0
     
     def get_current_proxy(self):
         """
@@ -149,5 +179,27 @@ class ProxyManager:
         with self.proxy_lock:
             if not self.current_proxy:
                 self.current_proxy = self.get_new_proxy()
-                self.last_rotation_time = time.time()
+                if not self.current_proxy:
+                    # Nếu không lấy được proxy mới, kiểm tra xem có phải do hạn chế thời gian không
+                    can_rotate, remaining_time = self.can_rotate_proxy()
+                    if not can_rotate:
+                        logger.warning(f"Không thể lấy proxy mới, cần đợi thêm {remaining_time} giây")
+                
             return self.current_proxy
+            
+    def force_rotate_proxy_if_possible(self):
+        """
+        Yêu cầu đổi proxy nhưng chỉ thực hiện nếu đã đủ thời gian tối thiểu
+        
+        Returns:
+            bool: True nếu đã đổi proxy thành công, False nếu chưa đủ thời gian
+        """
+        with self.proxy_lock:
+            can_rotate, remaining_time = self.can_rotate_proxy()
+            if can_rotate:
+                logger.info("Thực hiện yêu cầu đổi proxy...")
+                self.current_proxy = self.get_new_proxy()
+                return self.current_proxy is not None
+            else:
+                logger.warning(f"Không thể đổi proxy ngay lúc này, cần đợi thêm {remaining_time} giây")
+                return False

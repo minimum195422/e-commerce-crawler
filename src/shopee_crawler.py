@@ -50,7 +50,7 @@ class ShopeeCrawler:
             self.proxy_manager = None
             self.use_proxy = False
             logger.info("Không sử dụng proxy")
-        
+    
     def setup_driver(self):
         """Thiết lập trình duyệt Chrome với Selenium WebDriver và cấu hình proxy nếu có"""
         chrome_options = Options()
@@ -89,7 +89,12 @@ class ShopeeCrawler:
                 
                 logger.info(f"Đã cấu hình proxy: {proxy_info['host']}:{proxy_info['port']}")
             else:
-                logger.warning("Không thể lấy thông tin proxy, tiếp tục mà không có proxy")
+                # Kiểm tra xem có phải do giới hạn thời gian không
+                can_rotate, remaining_time = self.proxy_manager.can_rotate_proxy()
+                if not can_rotate:
+                    logger.warning(f"Không thể lấy thông tin proxy do còn phải đợi {remaining_time}s, tiếp tục mà không có proxy")
+                else:
+                    logger.warning("Không thể lấy thông tin proxy, tiếp tục mà không có proxy")
         
         # Sử dụng ChromeDriverManager để tự động tải driver phù hợp
         service = Service(ChromeDriverManager().install())
@@ -450,6 +455,7 @@ class ShopeeCrawler:
             logger.error(f"Không thể lấy tag sản phẩm: {e}")
             return []
     
+    # Cập nhật phương thức crawl_product_detail trong class ShopeeCrawler
     def crawl_product_detail(self, product_url, retry=0):
         """
         Trích xuất thông tin chi tiết của sản phẩm từ URL
@@ -537,12 +543,18 @@ class ShopeeCrawler:
                 logger.info(f"Đang thử lại lần {retry+1}...")
                 driver.quit()  # Đóng trình duyệt hiện tại
                 
-                # Nếu đang sử dụng proxy, đổi proxy mới trước khi thử lại
+                # Nếu đang sử dụng proxy, kiểm tra xem có thể đổi proxy không
                 if self.use_proxy and self.proxy_manager:
-                    logger.info("Đổi proxy mới trước khi thử lại...")
-                    with self.proxy_manager.proxy_lock:
-                        self.proxy_manager.current_proxy = self.proxy_manager.get_new_proxy()
-                        self.proxy_manager.last_rotation_time = time.time()
+                    can_rotate, remaining_time = self.proxy_manager.can_rotate_proxy()
+                    if can_rotate:
+                        logger.info("Đổi proxy mới trước khi thử lại...")
+                        rotated = self.proxy_manager.force_rotate_proxy_if_possible()
+                        if rotated:
+                            logger.info("Đã đổi proxy thành công")
+                        else:
+                            logger.warning("Không thể đổi proxy, tiếp tục với proxy hiện tại")
+                    else:
+                        logger.warning(f"Chưa thể đổi proxy, còn phải đợi {remaining_time} giây. Tiếp tục với proxy hiện tại")
                 
                 random_sleep(2, 5)  # Chờ một chút trước khi thử lại
                 return self.crawl_product_detail(product_url, retry + 1)
@@ -553,6 +565,7 @@ class ShopeeCrawler:
             # Đóng trình duyệt sau khi xong
             driver.quit()
             logger.info(f"Đã đóng trình duyệt sau khi lấy thông tin sản phẩm: {product_url}")
+
 
     def run(self, crawl_cycles=1, max_products_per_cycle=None, output_summary=True):
         """
