@@ -1,0 +1,153 @@
+import threading
+import logging
+import time
+import random
+import json
+import requests
+
+logger = logging.getLogger("ProxyManager")
+
+class ProxyManager:
+    """
+    Quản lý proxy xoay thông qua API
+    """
+    def __init__(self, api_key, proxy_rotation_interval=(60, 90)):
+        """
+        Khởi tạo proxy manager
+        
+        Args:
+            api_key: Khóa API của dịch vụ proxy xoay
+            proxy_rotation_interval: Khoảng thời gian (min, max) giữa các lần đổi proxy (giây)
+        """
+        self.api_key = api_key
+        self.proxy_rotation_interval = proxy_rotation_interval
+        self.proxy_url = f"https://proxyxoay.shop/api/get.php?key={api_key}&nhamang=random&tinhthanh=0"
+        self.current_proxy = None
+        self.proxy_expiry_time = None
+        self.last_rotation_time = 0
+        self.stop_rotation = False
+        self.rotation_thread = None
+        self.proxy_lock = threading.Lock()
+        self.force_rotation = False
+        
+    def get_new_proxy(self):
+        """
+        Lấy proxy mới từ API
+        
+        Returns:
+            Dict chứa thông tin proxy hoặc None nếu có lỗi
+        """
+        try:
+            response = requests.get(self.proxy_url, timeout=10)
+            content = response.text
+            
+            # Trích xuất phần JSON từ response
+            json_str = content.split('**', 2)[1] if '**' in content else content
+            
+            # Tìm phần JSON bắt đầu từ {
+            json_start = json_str.find('{')
+            if json_start != -1:
+                json_str = json_str[json_start:]
+                
+                # Tìm dấu } cuối cùng
+                json_end = json_str.rfind('}') + 1
+                if json_end > 0:
+                    json_str = json_str[:json_end]
+            
+            data = json.loads(json_str)
+            
+            if data.get('status') == 100:
+                logger.info(f"Proxy mới nhận được: {data.get('proxyhttp')} (hết hạn sau {data.get('message', '').split()[-1] if 'message' in data else 'N/A'})")
+                
+                # Phân tích proxyhttp string: ip:port:username:password
+                proxy_parts = data.get('proxyhttp', '').split(':')
+                if len(proxy_parts) == 4:
+                    proxy_info = {
+                        'host': proxy_parts[0],
+                        'port': proxy_parts[1],
+                        'username': proxy_parts[2],
+                        'password': proxy_parts[3],
+                        'full_http': data.get('proxyhttp'),
+                        'full_socks5': data.get('proxysocks5'),
+                        'provider': data.get('Nha Mang'),
+                        'location': data.get('Vi Tri'),
+                        'expiry': data.get('Token expiration date')
+                    }
+                    return proxy_info
+                else:
+                    logger.error(f"Định dạng proxy không đúng: {data.get('proxyhttp')}")
+            else:
+                logger.error(f"Lỗi khi lấy proxy: {data.get('message', 'Không có thông báo lỗi')}")
+                
+            return None
+        except Exception as e:
+            logger.error(f"Lỗi khi kết nối với API proxy: {str(e)}")
+            return None
+    
+    def format_proxy_for_selenium(self, proxy_info):
+        """
+        Định dạng thông tin proxy để sử dụng với Selenium
+        
+        Args:
+            proxy_info: Dict chứa thông tin proxy
+            
+        Returns:
+            Dict với cấu hình proxy cho Selenium
+        """
+        if not proxy_info:
+            return None
+        
+        return {
+            'proxy': {
+                'http': f"http://{proxy_info['username']}:{proxy_info['password']}@{proxy_info['host']}:{proxy_info['port']}",
+                'https': f"http://{proxy_info['username']}:{proxy_info['password']}@{proxy_info['host']}:{proxy_info['port']}",
+                'no_proxy': 'localhost,127.0.0.1'
+            }
+        }
+    
+    def start_rotation(self):
+        """
+        Bắt đầu luồng tự động đổi proxy
+        """
+        self.stop_rotation = False
+        self.rotation_thread = threading.Thread(target=self._rotation_worker)
+        self.rotation_thread.daemon = True
+        self.rotation_thread.start()
+        logger.info("Đã bắt đầu luồng tự động đổi proxy")
+    
+    def stop_rotation_thread(self):
+        """
+        Dừng luồng tự động đổi proxy
+        """
+        self.stop_rotation = True
+        if self.rotation_thread:
+            self.rotation_thread.join(timeout=2)
+        logger.info("Đã dừng luồng tự động đổi proxy")
+    
+    def _rotation_worker(self):
+        """Worker thread để tự động đổi proxy theo chu kỳ hoặc khi gặp lỗi"""
+        while not self.stop_rotation:
+            now = time.time()
+            
+            # Đổi proxy khi: hết hạn thời gian hoặc đánh dấu cần thay đổi (ví dụ sau lỗi 403/429)
+            if now - self.last_rotation_time >= random.uniform(*self.proxy_rotation_interval) or self.force_rotation:
+                with self.proxy_lock:
+                    logger.info("Đang thực hiện đổi proxy tự động...")
+                    self.current_proxy = self.get_new_proxy()
+                    self.last_rotation_time = now
+                    self.force_rotation = False
+            
+            time.sleep(5)
+    
+    def get_current_proxy(self):
+        """
+        Lấy proxy hiện tại, nếu chưa có thì lấy mới
+        
+        Returns:
+            Thông tin proxy hiện tại
+        """
+        with self.proxy_lock:
+            if not self.current_proxy:
+                self.current_proxy = self.get_new_proxy()
+                self.last_rotation_time = time.time()
+            return self.current_proxy

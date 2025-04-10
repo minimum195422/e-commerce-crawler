@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  shopee-crawler:
+    build: .
+    container_name: shopee-crawler
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python main.py --mode multi --headless
+    restart: unless-stopped
+
+  # Service để xem kết quả dữ liệu với Jupyter Notebook (tùy chọn)
+  jupyter:
+    image: jupyter/datascience-notebook:latest
+    container_name: shopee-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./data:/home/jovyan/data
+      - ./notebooks:/home/jovyan/notebooks
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    command: start-notebook.sh --NotebookApp.token='' --NotebookApp.password=''
