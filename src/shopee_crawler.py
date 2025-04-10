@@ -65,29 +65,36 @@ class ShopeeCrawler:
         # User-Agent để giả lập như đang sử dụng trình duyệt bình thường
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36")
         
+        # Biến để theo dõi xem có thành công trong việc sử dụng proxy không
+        proxy_configured = False
+        
         # Thêm cấu hình proxy nếu được bật
         if self.use_proxy and self.proxy_manager:
             proxy_info = self.proxy_manager.get_current_proxy()
             if proxy_info:
-                # Cấu hình proxy cho Selenium
-                chrome_options.add_argument(f'--proxy-server={proxy_info["host"]}:{proxy_info["port"]}')
-                
-                # Thêm plugin để xác thực proxy (nếu cần username/password)
-                plugin_path = create_proxy_auth_extension(
-                    proxy_info["host"],
-                    proxy_info["port"],
-                    proxy_info["username"],
-                    proxy_info["password"]
-                )
-                if plugin_path:
-                    chrome_options.add_extension(plugin_path)
-                    # Xóa file plugin sau khi đã thêm
-                    try:
-                        os.remove(plugin_path)
-                    except:
-                        pass
-                
-                logger.info(f"Đã cấu hình proxy: {proxy_info['host']}:{proxy_info['port']}")
+                try:
+                    # Cấu hình proxy cho Selenium
+                    chrome_options.add_argument(f'--proxy-server={proxy_info["host"]}:{proxy_info["port"]}')
+                    
+                    # Thêm plugin để xác thực proxy (nếu cần username/password)
+                    plugin_path = create_proxy_auth_extension(
+                        proxy_info["host"],
+                        proxy_info["port"],
+                        proxy_info["username"],
+                        proxy_info["password"]
+                    )
+                    if plugin_path:
+                        chrome_options.add_extension(plugin_path)
+                        # Xóa file plugin sau khi đã thêm
+                        try:
+                            os.remove(plugin_path)
+                        except:
+                            pass
+                    
+                    logger.info(f"Đã cấu hình proxy: {proxy_info['host']}:{proxy_info['port']}")
+                    proxy_configured = True
+                except Exception as e:
+                    logger.error(f"Lỗi khi cấu hình proxy: {e}")
             else:
                 # Kiểm tra xem có phải do giới hạn thời gian không
                 can_rotate, remaining_time = self.proxy_manager.can_rotate_proxy()
@@ -96,13 +103,25 @@ class ShopeeCrawler:
                 else:
                     logger.warning("Không thể lấy thông tin proxy, tiếp tục mà không có proxy")
         
+        # Nếu không thể cấu hình proxy hoặc không sử dụng proxy, thêm tùy chọn để tránh bị chặn
+        if not proxy_configured:
+            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+        
         # Sử dụng ChromeDriverManager để tự động tải driver phù hợp
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        
+        # Thêm đoạn mã JavaScript để ngụy trang webdriver
+        if not proxy_configured:
+            driver.execute_cdp_cmd('Network.setUserAgentOverride', {"userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"})
+            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
         wait = WebDriverWait(driver, self.wait_time)
         
         return driver, wait
-    
+
     def handle_popups(self, driver):
         """Xử lý các popup có thể xuất hiện"""
         try:

@@ -4,6 +4,7 @@ import time
 import random
 import json
 import requests
+import os
 
 logger = logging.getLogger("ProxyManager")
 
@@ -11,6 +12,10 @@ class ProxyManager:
     """
     Quản lý proxy xoay thông qua API
     """
+    # Thêm biến class để lưu thời gian đổi proxy cuối cùng giữa các lần khởi tạo
+    _last_rotation_time = 0
+    _lock = threading.Lock()
+    
     def __init__(self, api_key, proxy_rotation_interval=(60, 90)):
         """
         Khởi tạo proxy manager
@@ -24,11 +29,50 @@ class ProxyManager:
         self.proxy_url = f"https://proxyxoay.shop/api/get.php?key={api_key}&nhamang=random&tinhthanh=0"
         self.current_proxy = None
         self.proxy_expiry_time = None
-        self.last_rotation_time = 0
+        
+        # Sử dụng biến static lưu thời gian đổi proxy lần cuối
+        with ProxyManager._lock:
+            self.last_rotation_time = ProxyManager._last_rotation_time
+            
         self.stop_rotation = False
         self.rotation_thread = None
         self.proxy_lock = threading.Lock()
         self.force_rotation = False
+        
+        # Kiểm tra thời gian từ file nếu tồn tại
+        self._load_last_rotation_time()
+        
+    def _load_last_rotation_time(self):
+        """Tải thời gian đổi proxy cuối cùng từ file lưu trữ"""
+        try:
+            # Tạo thư mục cache nếu chưa tồn tại
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            cache_file = os.path.join(cache_dir, f'proxy_rotation_{self.api_key[:5]}.json')
+            
+            if os.path.exists(cache_file):
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    with ProxyManager._lock:
+                        self.last_rotation_time = data.get('last_rotation_time', 0)
+                        ProxyManager._last_rotation_time = self.last_rotation_time
+                        logger.info(f"Đã tải thời gian đổi proxy cuối: {self.last_rotation_time}")
+        except Exception as e:
+            logger.error(f"Lỗi khi tải thời gian đổi proxy từ cache: {e}")
+    
+    def _save_last_rotation_time(self):
+        """Lưu thời gian đổi proxy cuối cùng vào file"""
+        try:
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache')
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            cache_file = os.path.join(cache_dir, f'proxy_rotation_{self.api_key[:5]}.json')
+            
+            with open(cache_file, 'w') as f:
+                json.dump({'last_rotation_time': self.last_rotation_time}, f)
+        except Exception as e:
+            logger.error(f"Lỗi khi lưu thời gian đổi proxy vào cache: {e}")
         
     def get_new_proxy(self):
         """
@@ -69,7 +113,12 @@ class ProxyManager:
             
             if data.get('status') == 100:
                 # Cập nhật thời gian đổi proxy cuối cùng
-                self.last_rotation_time = current_time
+                with ProxyManager._lock:
+                    self.last_rotation_time = current_time
+                    ProxyManager._last_rotation_time = current_time
+                    
+                # Lưu thời gian đổi proxy vào file
+                self._save_last_rotation_time()
                 
                 logger.info(f"Proxy mới nhận được: {data.get('proxyhttp')} (hết hạn sau {data.get('message', '').split()[-1] if 'message' in data else 'N/A'})")
                 
@@ -134,7 +183,7 @@ class ProxyManager:
         Dừng luồng tự động đổi proxy
         """
         self.stop_rotation = True
-        if self.rotation_thread:
+        if self.rotation_thread and self.rotation_thread.is_alive():
             self.rotation_thread.join(timeout=2)
         logger.info("Đã dừng luồng tự động đổi proxy")
     
@@ -143,15 +192,18 @@ class ProxyManager:
         while not self.stop_rotation:
             now = time.time()
             
-            # Đổi proxy khi: hết hạn thời gian hoặc đánh dấu cần thay đổi (ví dụ sau lỗi 403/429)
-            if now - self.last_rotation_time >= random.uniform(*self.proxy_rotation_interval) or self.force_rotation:
+            # Chỉ đổi proxy khi vượt qua giới hạn thời gian hoặc khi bị ép buộc
+            max_interval = self.proxy_rotation_interval[1]
+            if (now - self.last_rotation_time >= max_interval) or self.force_rotation:
                 with self.proxy_lock:
-                    logger.info("Đang thực hiện đổi proxy tự động...")
-                    self.current_proxy = self.get_new_proxy()
-                    # Không cập nhật last_rotation_time ở đây vì đã cập nhật trong get_new_proxy nếu thành công
-                    self.force_rotation = False
+                    # Kiểm tra lại một lần nữa vì có thể đã có thread khác cập nhật
+                    if (now - self.last_rotation_time >= max_interval) or self.force_rotation:
+                        logger.info("Đang thực hiện đổi proxy tự động...")
+                        self.current_proxy = self.get_new_proxy()
+                        self.force_rotation = False
             
-            time.sleep(5)
+            # Ngủ ngắn hơn để phản ứng nhanh với force_rotation
+            time.sleep(3)
     
     def can_rotate_proxy(self):
         """
@@ -178,12 +230,11 @@ class ProxyManager:
         """
         with self.proxy_lock:
             if not self.current_proxy:
-                self.current_proxy = self.get_new_proxy()
-                if not self.current_proxy:
-                    # Nếu không lấy được proxy mới, kiểm tra xem có phải do hạn chế thời gian không
-                    can_rotate, remaining_time = self.can_rotate_proxy()
-                    if not can_rotate:
-                        logger.warning(f"Không thể lấy proxy mới, cần đợi thêm {remaining_time} giây")
+                can_rotate, remaining_time = self.can_rotate_proxy()
+                if can_rotate:
+                    self.current_proxy = self.get_new_proxy()
+                else:
+                    logger.warning(f"Không thể lấy proxy mới, cần đợi thêm {remaining_time} giây")
                 
             return self.current_proxy
             

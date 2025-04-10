@@ -8,10 +8,21 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config
+      - ./cache:/app/cache
     environment:
       - PYTHONUNBUFFERED=1
-    command: python main.py --mode multi --headless
-    restart: unless-stopped
+    command: >
+      bash -c "
+        python setup_init.py &&
+        python main.py --mode multi --headless
+      "
+    restart: on-failure:3
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(('localhost', 80))"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # Service để xem kết quả dữ liệu với Jupyter Notebook (tùy chọn)
   jupyter:

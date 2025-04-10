@@ -105,8 +105,13 @@ class ShopeeWorkerManager:
         if not self.proxy_api_keys:
             logger.error("Không có API key nào cho proxy xoay. Không thể tiếp tục.")
             return []
-            
+        
+        # Tạo thư mục cache nếu chưa tồn tại
+        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache')
+        os.makedirs(cache_dir, exist_ok=True)
+                
         all_products = []
+        max_retries_per_cycle = 3  # Số lần thử lại tối đa cho mỗi chu kỳ
         
         for cycle in range(1, cycles + 1):
             logger.info(f"\n===== BẮT ĐẦU CHU KỲ {cycle}/{cycles} =====")
@@ -115,23 +120,43 @@ class ShopeeWorkerManager:
             url_api_key = collect_url_api_key or self.proxy_api_keys[0]
             
             # Khởi tạo crawler để thu thập URL từ trang chủ
-            main_crawler = ShopeeCrawler(
-                proxy_api_key=url_api_key,
-                headless=self.headless,
-                use_proxy=True
-            )
+            for retry in range(max_retries_per_cycle):
+                try:
+                    main_crawler = ShopeeCrawler(
+                        proxy_api_key=url_api_key,
+                        headless=self.headless,
+                        use_proxy=True
+                    )
+                    
+                    logger.info(f"Đang thu thập URL sản phẩm với API key: {url_api_key[:5]}...{url_api_key[-3:]}")
+                    
+                    # Thu thập URL từ trang chủ
+                    main_crawler.collect_product_links()
+                    
+                    # Đảm bảo dừng luồng đổi proxy sau khi thu thập URL
+                    if main_crawler.proxy_manager:
+                        main_crawler.proxy_manager.stop_rotation_thread()
+                    
+                    if not main_crawler.product_links:
+                        logger.warning(f"Chu kỳ {cycle} (Lần thử {retry+1}): Không thu thập được đường link nào, thử lại.")
+                        time.sleep(5)  # Chờ một chút trước khi thử lại
+                        continue
+                    
+                    # Nếu thành công, thoát khỏi vòng lặp retry
+                    break
+                    
+                except Exception as e:
+                    logger.error(f"Lỗi khi thu thập URL (Chu kỳ {cycle}, Lần thử {retry+1}): {str(e)}")
+                    if retry < max_retries_per_cycle - 1:
+                        logger.info(f"Đang thử lại lần {retry+2}...")
+                        time.sleep(10)  # Chờ lâu hơn trước khi thử lại
+                    else:
+                        logger.error(f"Đã vượt quá số lần thử lại cho chu kỳ {cycle}. Chuyển sang chu kỳ tiếp theo.")
+                        main_crawler = None
             
-            logger.info(f"Đang thu thập URL sản phẩm với API key: {url_api_key[:5]}...{url_api_key[-3:]}")
-            
-            # Thu thập URL từ trang chủ
-            main_crawler.collect_product_links()
-            
-            # Đảm bảo dừng luồng đổi proxy sau khi thu thập URL
-            if main_crawler.proxy_manager:
-                main_crawler.proxy_manager.stop_rotation_thread()
-            
-            if not main_crawler.product_links:
-                logger.warning(f"Chu kỳ {cycle}: Không thu thập được đường link nào, chuyển sang chu kỳ tiếp theo.")
+            # Kiểm tra nếu không thu thập được link sau tất cả các lần thử
+            if not main_crawler or not main_crawler.product_links:
+                logger.warning(f"Chu kỳ {cycle}: Không thu thập được đường link nào sau nhiều lần thử, chuyển sang chu kỳ tiếp theo.")
                 continue
             
             # Giới hạn số lượng sản phẩm nếu cần
@@ -148,8 +173,16 @@ class ShopeeWorkerManager:
             
             # Tạo và bắt đầu các worker
             with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+                worker_futures = []
                 for i in range(self.num_workers):
-                    executor.submit(self.worker_task, i+1)
+                    worker_futures.append(executor.submit(self.worker_task, i+1))
+                
+                # Theo dõi và đợi các worker hoàn thành
+                for future in worker_futures:
+                    try:
+                        future.result()  # Đợi worker hoàn thành và kiểm tra ngoại lệ
+                    except Exception as e:
+                        logger.error(f"Một worker đã gặp lỗi không xử lý được: {str(e)}")
             
             # Đợi tất cả task hoàn thành
             self.product_queue.join()
@@ -164,6 +197,11 @@ class ShopeeWorkerManager:
                     json.dump(self.results, f, ensure_ascii=False, indent=4)
                 
                 logger.info(f"Chu kỳ {cycle}: Đã lưu thông tin của {len(self.results)} sản phẩm vào {cycle_summary_file}")
+            
+            # Cho phép một số thời gian nghỉ giữa các chu kỳ
+            if cycle < cycles:
+                logger.info(f"Đợi 30 giây trước khi bắt đầu chu kỳ tiếp theo...")
+                time.sleep(30)
             
             logger.info(f"===== KẾT THÚC CHU KỲ {cycle}/{cycles} =====")
         
