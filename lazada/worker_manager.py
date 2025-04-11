@@ -1,20 +1,6 @@
-import threading
-import queue
-import time
-from concurrent.futures import ThreadPoolExecutor
-import random
-import os
-import json
-import logging
-from datetime import datetime
-import pandas as pd
 
-from .shopee_crawler import ShopeeCrawler
-
-logger = logging.getLogger("WorkerManager")
-
-class ShopeeWorkerManager:
-    def __init__(self, proxy_api_keys=None, headless=True, num_workers=None):
+class LazadaWorkerManager:
+    def __init__(self, proxy_api_keys=None, headless=False, num_workers=None):
         """
         Khởi tạo worker manager với nhiều API key cho proxy xoay
         

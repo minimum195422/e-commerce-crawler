@@ -26,7 +26,7 @@ def setup_logging(log_dir="logs"):
     
     return logging.getLogger("ShopeeCrawler")
 
-def random_sleep(min_time=1, max_time=3):
+def random_sleep(min_time=3, max_time=5):
     """Ngủ ngẫu nhiên để mô phỏng hành vi người dùng thật"""
     sleep_time = random.uniform(min_time, max_time)
     logger.debug(f"Ngủ {sleep_time:.2f} giây")
