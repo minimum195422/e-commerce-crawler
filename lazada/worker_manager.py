@@ -1,3 +1,17 @@
+import logging
+import threading
+import queue
+import time
+import random
+import os
+import json
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import pandas as pd
+
+from .lazada_crawler import LazadaCrawler
+
+logger = logging.getLogger("LazadaWorkerManager")
 
 class LazadaWorkerManager:
     def __init__(self, proxy_api_keys=None, headless=False, num_workers=None):
@@ -32,7 +46,7 @@ class LazadaWorkerManager:
         logger.info(f"Worker {worker_id} sử dụng API key proxy: {api_key[:5]}...{api_key[-3:]}")
         
         # Khởi tạo crawler riêng với API key riêng
-        crawler = ShopeeCrawler(
+        crawler = LazadaCrawler(
             proxy_api_key=api_key,
             headless=self.headless,
             wait_time=10,
@@ -95,6 +109,10 @@ class LazadaWorkerManager:
         # Tạo thư mục cache nếu chưa tồn tại
         cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cache')
         os.makedirs(cache_dir, exist_ok=True)
+        
+        # Tạo thư mục data nếu chưa tồn tại
+        data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+        os.makedirs(data_dir, exist_ok=True)
                 
         all_products = []
         max_retries_per_cycle = 3  # Số lần thử lại tối đa cho mỗi chu kỳ
@@ -108,7 +126,7 @@ class LazadaWorkerManager:
             # Khởi tạo crawler để thu thập URL từ trang chủ
             for retry in range(max_retries_per_cycle):
                 try:
-                    main_crawler = ShopeeCrawler(
+                    main_crawler = LazadaCrawler(
                         proxy_api_key=url_api_key,
                         headless=self.headless,
                         use_proxy=True
@@ -178,7 +196,7 @@ class LazadaWorkerManager:
             
             # Lưu kết quả của chu kỳ hiện tại
             if self.results:
-                cycle_summary_file = os.path.join("data", f"cycle_{cycle}_products_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
+                cycle_summary_file = os.path.join(data_dir, f"cycle_{cycle}_products_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
                 with open(cycle_summary_file, 'w', encoding='utf-8') as f:
                     json.dump(self.results, f, ensure_ascii=False, indent=4)
                 
@@ -193,12 +211,12 @@ class LazadaWorkerManager:
         
         # Lưu tổng kết
         if all_products:
-            all_products_file = os.path.join("data", f"all_products_multi_proxy_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
+            all_products_file = os.path.join(data_dir, f"all_products_multi_proxy_{datetime.now().strftime('%Y%m%d%H%M%S')}.json")
             with open(all_products_file, 'w', encoding='utf-8') as f:
                 json.dump(all_products, f, ensure_ascii=False, indent=4)
             
             # Tạo CSV tổng hợp
-            csv_summary_file = os.path.join("data", f"all_products_multi_proxy_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv")
+            csv_summary_file = os.path.join(data_dir, f"all_products_multi_proxy_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv")
             csv_data = []
             for product in all_products:
                 csv_record = {

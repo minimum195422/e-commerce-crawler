@@ -50,6 +50,127 @@ class LazadaCrawler:
             self.proxy_manager = None
             self.use_proxy = False
             logger.info("Không sử dụng proxy")
+
+    def crawl_product_detail(self, product_url):
+        """
+        Crawl thông tin chi tiết của một sản phẩm từ URL
+        
+        Args:
+            product_url: URL của sản phẩm cần crawl
+            
+        Returns:
+            Dict chứa thông tin chi tiết sản phẩm
+        """
+        logger.info(f"Bắt đầu crawl thông tin chi tiết của sản phẩm: {product_url}")
+        retries = 0
+        max_retries = self.max_retries
+        
+        while retries <= max_retries:
+            try:
+                # Khởi tạo trình duyệt
+                driver, wait = self.setup_driver()
+                
+                try:
+                    # Truy cập trang sản phẩm
+                    driver.get(product_url)
+                    logger.info(f"Đã truy cập URL sản phẩm, đợi trang tải xong...")
+                    
+                    # Chờ trang tải xong
+                    wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+                    random_sleep(3, 5)  # Chờ thêm để tránh bị phát hiện là bot
+                    
+                    # Xử lý popup nếu có
+                    self.handle_popups(driver)
+                    
+                    # Tạo thư mục lưu ảnh cho sản phẩm này
+                    # Trích xuất product_id từ URL
+                    ids = self.extract_lazada_ids(product_url)
+                    product_id = ids.get("product_id", "unknown")
+                    
+                    # Tạo thư mục images nếu chưa tồn tại
+                    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    images_dir = os.path.join(base_dir, 'images', product_id)
+                    os.makedirs(images_dir, exist_ok=True)
+                    
+                    # Bắt đầu lấy thông tin sản phẩm
+                    product_info = {
+                        "product_id": product_id,
+                        "shop_id": ids.get("shop_id", "unknown"),
+                        "url": product_url,
+                        "crawl_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    
+                    # Lấy tên sản phẩm
+                    product_info["product_name"] = self.get_product_name(driver, wait)
+                    
+                    # Lấy phân loại hàng hóa
+                    product_info["category"] = self.get_product_category(driver)
+                    
+                    # Lấy giá sản phẩm
+                    product_info["price"] = self.get_product_price(driver)
+                    
+                    # Lấy thông tin đánh giá
+                    product_info["rating"] = self.get_product_rating(driver)
+                    product_info["total_rating"] = self.get_total_rating(driver)
+                    
+                    # Lấy thông tin đã bán
+                    product_info["total_sold"] = self.get_total_sold(driver)
+                    
+                    # Lấy thông tin shop
+                    product_info["shop_info"] = self.get_shop_info(driver)
+                    
+                    # Lấy mô tả sản phẩm
+                    product_info["description"] = self.get_product_description(driver)
+                    
+                    # Lấy thông số kỹ thuật
+                    product_info["specifications"] = self.get_product_specifications(driver)
+                    
+                    # Lấy thông tin biến thể
+                    product_info["variations"] = self.get_product_variations(driver, images_dir)
+                    
+                    # Lấy thông tin giao hàng
+                    product_info["delivery_options"] = self.get_delivery_options(driver)
+                    
+                    logger.info(f"Đã crawl xong thông tin chi tiết của sản phẩm: {product_info['product_name']}")
+                    
+                    return product_info
+                    
+                except Exception as e:
+                    logger.error(f"Lỗi khi crawl thông tin sản phẩm: {str(e)}")
+                    retries += 1
+                    
+                    if retries <= max_retries:
+                        # Nếu có proxy manager, thử đổi proxy
+                        if self.proxy_manager:
+                            self.proxy_manager.force_rotate_proxy_if_possible()
+                            logger.info(f"Đổi proxy và thử lại lần {retries}/{max_retries}...")
+                        else:
+                            logger.info(f"Thử lại lần {retries}/{max_retries}...")
+                            
+                        # Đợi một lúc trước khi thử lại
+                        time.sleep(random.uniform(5, 10))
+                    else:
+                        logger.error(f"Đã vượt quá số lần thử lại. Bỏ qua sản phẩm này.")
+                        return None
+                
+                finally:
+                    # Đảm bảo đóng trình duyệt
+                    driver.quit()
+                    logger.info("Đã đóng trình duyệt")
+                    
+            except Exception as outer_e:
+                logger.error(f"Lỗi ngoài khi khởi tạo trình duyệt: {str(outer_e)}")
+                retries += 1
+                
+                if retries <= max_retries:
+                    # Đợi một lúc trước khi thử lại
+                    time.sleep(random.uniform(5, 10))
+                    logger.info(f"Thử lại lần {retries}/{max_retries}...")
+                else:
+                    logger.error(f"Đã vượt quá số lần thử lại. Bỏ qua sản phẩm này.")
+                    return None
+        
+        return None  # Nếu tất cả các lần thử đều thất bại
     
     def setup_driver(self):
         """Thiết lập trình duyệt Chrome với Selenium WebDriver và cấu hình proxy nếu có"""
@@ -567,13 +688,6 @@ class LazadaCrawler:
             Dictionary chứa shop_id và product_id
         """
         try:
-            # Trích xuất ID trực tiếp
-            ids = self.extract_lazada_ids(product_url)
-            return ids
-        except Exception as e:
-            logger.error(f"Lỗi khi trích xuất ID từ URL: {e}")
-            
-            # Trích xuất thủ công nếu hàm trợ giúp không hoạt động
             product_id = ""
             shop_id = ""
             
@@ -588,3 +702,6 @@ class LazadaCrawler:
                 shop_id = shop_id_match.group(1)
             
             return {"product_id": product_id, "shop_id": shop_id}
+        except Exception as e:
+            logger.error(f"Lỗi khi trích xuất ID từ URL: {e}")
+            return {"product_id": "", "shop_id": ""}

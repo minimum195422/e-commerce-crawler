@@ -1,0 +1,19 @@
+
+services:
+  lazada-crawler:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./images:/app/images
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+    command: >
+      python main.py 
+      --headless 
+      --proxy-keys ${PROXY_KEYS:-your_proxy_key_here}
+      --cycles ${CYCLES:-1}
+      --max-products ${MAX_PRODUCTS:-10}
+      --workers ${WORKERS:-1}
+    restart: unless-stopped
