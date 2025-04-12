@@ -178,7 +178,7 @@ class LazadaCrawler:
         if self.headless:
             chrome_options.add_argument("--headless")
         
-        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--window-size=1366,768") 
         chrome_options.add_argument("--disable-notifications")
         chrome_options.add_argument("--disable-popup-blocking")
         chrome_options.add_argument("--disable-infobars")
@@ -234,7 +234,8 @@ class LazadaCrawler:
         try:
             service = Service(ChromeDriverManager().install())
         except:
-            service = Service("chromedriver.exe")  # Fallback nếu không tự động tải được
+            # Trên Windows, đường dẫn thường có .exe
+            service = Service("chromedriver.exe")
             
         driver = webdriver.Chrome(service=service, options=chrome_options)
         
@@ -328,6 +329,7 @@ class LazadaCrawler:
             
         # Cập nhật danh sách đường link sản phẩm
         self.product_links = collected_links
+        time.sleep(60)
         return collected_links
 
     def get_product_name(self, driver, wait):
