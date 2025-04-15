@@ -3,25 +3,14 @@ import time
 import json
 import random
 from datetime import datetime
-import os
-from seleniumwire import webdriver  # Change: Use seleniumwire instead of selenium
+from seleniumwire import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from proxy import RotatingProxy
-
-# Flag để quyết định có sử dụng Kafka hay không
-USE_KAFKA = False
-
-if USE_KAFKA:
-    try:
-        from kafka import KafkaProducer
-        print("Kafka được kích hoạt")
-    except ImportError:
-        print("Không tìm thấy thư viện Kafka, chuyển sang lưu file")
-        USE_KAFKA = False
+from tiki.proxy import RotatingProxy
+from rabbitmq_connector import RabbitMQConnector
 
 def setup_proxy_option(proxy):
     # Tạo proxy URL
@@ -48,6 +37,7 @@ def setup_driver(proxy=None):
     chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-notifications")
     chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument(f"--lang=vi-VN")
     
     # Thêm cấu hình để tránh màn hình trắng
     chrome_options.add_argument("--no-sandbox")
@@ -55,6 +45,8 @@ def setup_driver(proxy=None):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument('--ignore-ssl-errors=yes')
+    chrome_options.add_argument('--ignore-certificate-errors')
     
     # Tùy chọn để tránh phát hiện bot
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
@@ -84,21 +76,6 @@ def setup_driver(proxy=None):
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
     return driver
-
-def initialize_kafka_producer():
-    """Khởi tạo Kafka producer"""
-    if not USE_KAFKA:
-        return None
-        
-    try:
-        producer = KafkaProducer(
-            bootstrap_servers=['localhost:9092'],
-            value_serializer=lambda x: json.dumps(x).encode('utf-8')
-        )
-        return producer
-    except Exception as e:
-        print(f"Lỗi kết nối Kafka: {str(e)}")
-        return None
 
 def extract_product_urls(driver):
     """Trích xuất URLs của sản phẩm từ phần gợi ý"""
@@ -137,7 +114,7 @@ def extract_product_urls(driver):
                         pass
                     
                     product_urls.append(url)
-                    print(f"  - Sản phẩm {index+1}: {url[:100]}...")
+                    # print(f"  - Sản phẩm {index+1}: {url[:100]}...")
             except Exception as e:
                 print(f"Lỗi khi trích xuất URL cho sản phẩm thứ {index+1}: {str(e)}")
         
@@ -147,77 +124,6 @@ def extract_product_urls(driver):
     except Exception as e:
         print(f"Lỗi tổng thể khi trích xuất URL sản phẩm: {str(e)}")
         return []
-
-# Phiên bản nâng cao với JavaScript để xử lý trường hợp đặc biệt
-def extract_product_urls_advanced(driver):
-    """Trích xuất URLs của sản phẩm từ phần gợi ý sử dụng JavaScript"""
-    try:
-        print("Bắt đầu trích xuất URL sản phẩm với JavaScript...")
-        
-        # Sử dụng JavaScript để trích xuất tất cả URL sản phẩm
-        product_links = driver.execute_script("""
-            // Tìm container gợi ý sản phẩm
-            const container = document.querySelector('.sc-25579e0e-0.kzWQME');
-            if (!container) return [];
-            
-            // Tìm tất cả link sản phẩm
-            const links = container.querySelectorAll('a.sc-8b415d9d-1.iRifC.product-item');
-            
-            // Trích xuất href attribute
-            const urls = [];
-            links.forEach(link => {
-                if (link.href) {
-                    urls.push(link.href);
-                }
-            });
-            
-            return urls;
-        """)
-        
-        if product_links and len(product_links) > 0:
-            print(f"Đã trích xuất thành công {len(product_links)} URL sản phẩm bằng JavaScript")
-            
-            # Hiển thị danh sách URLs (chỉ hiển thị 5 URLs đầu tiên để tránh quá dài)
-            for index, url in enumerate(product_links[:5]):
-                print(f"  - Sản phẩm {index+1}: {url[:100]}...")
-                
-            if len(product_links) > 5:
-                print(f"  ... và {len(product_links) - 5} sản phẩm khác")
-                
-            return product_links
-        else:
-            print("Không tìm thấy URL sản phẩm nào bằng JavaScript")
-            return []
-            
-    except Exception as e:
-        print(f"Lỗi khi trích xuất URL sản phẩm bằng JavaScript: {str(e)}")
-        return []
-
-def send_to_kafka(producer, urls):
-    """Gửi danh sách URLs vào Kafka topic hoặc lưu vào file"""
-    if not urls:
-        print("Không có URL nào để xử lý")
-        return
-        
-    if producer:
-        for url in urls:
-            data = {
-                "url": url,
-                "timestamp": datetime.now().isoformat()
-            }
-            producer.send('product_urls', value=data)
-        
-        producer.flush()
-        print(f"Đã gửi {len(urls)} URL sản phẩm vào Kafka")
-    else:
-        # Lưu vào file nếu không có Kafka
-        with open('product_urls.json', 'w', encoding='utf-8') as f:
-            data = [{
-                "url": url,
-                "timestamp": datetime.now().isoformat()
-            } for url in urls]
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"Đã lưu {len(urls)} URL sản phẩm vào file product_urls.json")
 
 def close_popup_ads(driver):
     """Đóng popup quảng cáo nếu nó xuất hiện"""
@@ -406,19 +312,38 @@ def click_view_more_button(driver, num_clicks=3):
     
     print(f"Hoàn thành thao tác Xem thêm, nhấn được {i+1 if at_least_one_click else 0}/{num_clicks} lần")
 
-def crawl_tiki_product_list(proxy=None):
+def crawl_tiki_product_list():
     """Hàm chính để crawl danh sách sản phẩm"""
+
+    api_key = "BxHgfeqJKsNPAclVQnBfmD"
+    proxy_manager = RotatingProxy(api_key)
+
+    # Khởi tạo kết nối RabbitMQ
+    rabbitmq = RabbitMQConnector(
+        host='localhost',  # Thay đổi nếu RabbitMQ chạy ở địa chỉ khác
+        port=5672,
+        username='admin',
+        password='admin',
+        queue_name='tiki_product_queue'
+    )
+    
+    # Thử kết nối với RabbitMQ
+    if not rabbitmq.connect():
+        print("Không thể kết nối với RabbitMQ, thoát crawler")
+        return
+    
     max_retries = 3
     for attempt in range(max_retries):
+        proxy = proxy_manager.get_new_proxy()
         driver = setup_driver(proxy)
-        all_product_urls = set()
-        
+
         try:
-            
             # Mở trang Tiki
             print("Đang truy cập trang Tiki...")
             driver.get("https://tiki.vn/")
-            time.sleep(20)
+            WebDriverWait(driver, 61).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
             print("Truy cập thành công, bắt đầu xác định dữ liệu")
 
             close_popup_ads(driver)
@@ -441,7 +366,7 @@ def crawl_tiki_product_list(proxy=None):
                 
                 # Kiểm tra xem phần tử mục tiêu đã xuất hiện chưa
                 try:
-                    target_element = driver.find_element(By.CSS_SELECTOR, ".sc-25579e0e-0.kzWQME")
+                    driver.find_element(By.CSS_SELECTOR, ".sc-25579e0e-0.kzWQME")
                     target_found = True
                     print("Đã tìm thấy phần sản phẩm gợi ý!")
                     time.sleep(3)  # Đợi cuộn hoàn tất
@@ -451,25 +376,22 @@ def crawl_tiki_product_list(proxy=None):
             click_view_more_button(driver, num_clicks=3)
             product_urls = extract_product_urls(driver)
             if product_urls:
-                print(f"Đã lấy được {product_urls.__len__} đường dẫn sản phẩm")
+                print(f"Đã tìm thấy {len(product_urls)} URL sản phẩm, chuẩn bị gửi lên RabbitMQ")
+                # Gửi danh sách URL lên RabbitMQ - mỗi URL là một message riêng biệt
+                sent_count = rabbitmq.send_product_urls(product_urls)
+                print(f"Đã gửi {sent_count}/{len(product_urls)} URL lên RabbitMQ")
+                
+                if sent_count > 0:
+                    print("Quá trình crawl và gửi dữ liệu thành công!")
+                    break  # Thoát khỏi vòng lặp retry nếu thành công
+                else:
+                    print("Không gửi được URL nào lên RabbitMQ")
             else:
                 print("Không lấy được đường link sản phẩm nào!!!")
-            break
                             
         except TimeoutException:
             print("Trang Tiki không tải được")
-            
-            print("Thử làm mới trang...")
-            try:
-                driver.refresh()
-                WebDriverWait(driver, 30).until(
-                    EC.presence_of_element_located((By.TAG_NAME, "body"))
-                )
-                print("Làm mới trang thành công")
-            except:
-                print("Làm mới trang thất bại, thoát crawler")
-                return
-            
+            print("Thử lại...")
         finally:
             # Đảm bảo đóng driver
             if driver:
@@ -482,22 +404,6 @@ def crawl_tiki_product_list(proxy=None):
 if __name__ == "__main__":
     # Định dạng proxy: http://username:password@host:port
     # Ví dụ: HTTP_PROXY = "username:password@1.2.3.4:8080"
-    api_key = "hgvOiDXwraQZOjvKwRUehk"
-    proxy_manager = RotatingProxy(api_key)
-
-    HTTP_PROXY = proxy_manager.get_new_proxy()
     
-    # Tùy chọn chạy với hoặc không có proxy
-    USE_PROXY = True
     
-    try:
-        if USE_PROXY:
-            print(f"Đang chạy với proxy: {HTTP_PROXY['ip']}:{HTTP_PROXY['port']}")
-            crawl_tiki_product_list(HTTP_PROXY)
-        else:
-            print("Đang chạy không dùng proxy")
-            crawl_tiki_product_list(None)
-    except Exception as e:
-        print(f"Lỗi khi chạy crawler: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    crawl_tiki_product_list()

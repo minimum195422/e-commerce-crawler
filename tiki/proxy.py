@@ -6,11 +6,6 @@ from urllib.parse import quote
 
 class RotatingProxy:
     def __init__(self, proxy_key):
-        """
-        Khởi tạo class RotatingProxy với API key
-        
-        :param proxy_key: API key của dịch vụ proxy xoay
-        """
         self.proxy_key = proxy_key
         self.current_proxy = None
         self.last_proxy_change = 0
@@ -61,13 +56,3 @@ class RotatingProxy:
             print(f"Lỗi khi lấy proxy mới: {str(e)}")
         
         return None
-
-# Sử dụng class
-if __name__ == "__main__":
-    # Khởi tạo với API key
-    api_key = "hgvOiDXwraQZOjvKwRUehk"
-    proxy_manager = RotatingProxy(api_key)
-    
-    # Lấy proxy mới
-    new_proxy = proxy_manager.get_new_proxy()
-    print(new_proxy)
