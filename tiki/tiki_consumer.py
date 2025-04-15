@@ -2,6 +2,7 @@
 import time
 import json
 import random
+import threading
 import re
 import os
 import requests
@@ -596,8 +597,7 @@ class Tiki_Consumer:
     def extract_product_variants(self, driver):
         result = {
             "variant_categories": {},  # Dictionary các loại biến thể và giá trị 
-            "variants_with_images": {},  # Các biến thể có ảnh
-            "variants_with_price": {}   # Các biến thể có giá riêng
+            "variants_with_images": {}  # Các biến thể có ảnh
         }
         
         try:
@@ -620,8 +620,6 @@ class Tiki_Consumer:
                 option_list = []
                 # Danh sách lưu text của các tùy chọn cho variant_categories
                 option_text_list = []
-                # Danh sách lưu thông tin giá của các tùy chọn
-                option_price_list = []
                 
                 # Kiểm tra xem danh mục có ảnh không
                 has_images = False
@@ -629,12 +627,12 @@ class Tiki_Consumer:
                 for option in options:
                     option.click()
                     try:
-                        WebDriverWait(driver, 10).until(lambda d: wait_for_option_active(option))
+                        WebDriverWait(driver, 10).until(lambda d: self.wait_for_option_active(option))
                     except Exception as e:
                         print(f"Timeout đợi option active: {e}")
                         continue
                     
-                    # Chờ để ảnh chính và giá được cập nhật
+                    # Chờ để ảnh chính được cập nhật
                     time.sleep(5)
                     
                     # Lấy text của option
@@ -650,21 +648,6 @@ class Tiki_Consumer:
                     # Thêm text vào danh sách cho variant_categories
                     option_text_list.append(option_text)
                     
-                    # Lấy thông tin giá sau khi chọn option
-                    current_price = extract_current_price(driver)
-                    original_price = extract_original_price(driver)
-                    discount = extract_discount(driver)
-                    
-                    # Tạo thông tin giá cho option này
-                    price_info = {
-                        "text": option_text,
-                        "current_price": current_price,
-                        "original_price": original_price,
-                        "discount": discount
-                    }
-                    
-                    option_price_list.append(price_info)
-                    
                     # Kiểm tra xem danh mục này có ảnh không (phát hiện các option có dạng hình ảnh)
                     try:
                         # Chỉ kiểm tra xem option có picture.webpimg-container không để biết đây có phải danh mục có ảnh
@@ -672,7 +655,7 @@ class Tiki_Consumer:
                             has_images = True
                             
                             # Sử dụng hàm extract_thumbnail_url_from_driver đã có để lấy URL hình ảnh
-                            img_src = extract_thumbnail_url_from_driver(driver)
+                            img_src = self.extract_thumbnail_url_from_driver(driver)
                             
                             if img_src:
                                 # Nếu tìm được URL ảnh từ hàm đã có
@@ -724,16 +707,13 @@ class Tiki_Consumer:
                     
                 if has_images:
                     result["variants_with_images"][category_name] = option_list
-                    
-                
-                result["variants_with_price"][category_name] = option_price_list
                 
             return result
         
         except Exception as e:
             print(f"Lỗi khi trích xuất danh mục tùy chọn: {e}")
             return result
-
+    
     
     def extract_product_details(self, driver):
         result_text = "Thông tin chi tiết:\n"
@@ -1183,7 +1163,77 @@ class Tiki_Consumer:
         finally:
             rabbitmq.close()
 
-if __name__ == "__main__":
-    api_key = "BxHgfeqJKsNPAclVQnBfmD"
+
+
+def consumer_worker(consumer_id, api_key):
+    print(f"Consumer #{consumer_id} đang khởi động với API key: {api_key}")
     consumer = Tiki_Consumer(api_key)
-    consumer.run()
+    
+    try:
+        # Thêm thời gian ngẫu nhiên trước khi khởi động để tránh xung đột
+        delay = random.uniform(1.0, 5.0)
+        time.sleep(delay)
+        
+        # Chạy consumer
+        consumer.run()
+    except Exception as e:
+        print(f"Consumer #{consumer_id} gặp lỗi: {str(e)}")
+    finally:
+        print(f"Consumer #{consumer_id} đã kết thúc")
+
+
+def main():
+    """
+    Hàm main khởi tạo và quản lý 10 consumer chạy đa luồng
+    """
+    # Danh sách API key (thay thế bằng danh sách key thực của bạn)
+    api_keys = [
+        "BxHgfeqJKsNPAclVQnBfmD",  # Key mặc định từ mã nguồn gốc
+        "hgvOiDXwraQZOjvKwRUehk"
+    ]
+    
+    # Số lượng consumer cần chạy
+    num_consumers = 2
+    
+    # Danh sách các luồng
+    threads = []
+    
+    # Tạo và khởi động các luồng consumer
+    for i in range(num_consumers):
+        # Lấy API key từ danh sách, sử dụng modulo để lặp lại nếu số consumer > số key
+        api_key = api_keys[i % len(api_keys)]
+        
+        # Tạo luồng cho consumer
+        thread = threading.Thread(
+            target=consumer_worker,
+            args=(i + 1, api_key),
+            name=f"Consumer-{i+1}"
+        )
+        
+        # Thêm vào danh sách và khởi động
+        threads.append(thread)
+        thread.start()
+        print(f"Đã khởi động Consumer #{i+1} với key: {api_key}")
+        
+        # Chờ một chút trước khi khởi động consumer tiếp theo
+        time.sleep(1)
+    
+    # Chờ tất cả các consumer hoàn thành (tùy chọn)
+    # Thông thường trong ứng dụng thực tế, bạn có thể muốn chương trình chạy mãi mãi
+    # cho đến khi bị dừng bởi người dùng (Ctrl+C) hoặc một cơ chế dừng khác
+    try:
+        print("Tất cả consumer đã được khởi động. Nhấn Ctrl+C để dừng...")
+        
+        # Đợi tất cả các luồng hoàn thành 
+        for thread in threads:
+            thread.join()
+            
+    except KeyboardInterrupt:
+        print("\nĐang dừng tất cả consumer...")
+        # Lưu ý: Việc dừng các luồng không phải là trực tiếp trong Python
+        # Các worker sẽ kết thúc khi consumer.run() kết thúc hoặc gặp lỗi
+    
+    print("Tất cả consumer đã kết thúc")
+
+if __name__ == "__main__":
+    main()
