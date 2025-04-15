@@ -27,7 +27,7 @@ class Tiki_Consumer:
     def setup_proxy_option(self, proxy):
         # Tạo proxy URL
         proxy_url = f"http://{proxy['username']}:{proxy['password']}@{proxy['ip']}:{proxy['port']}"
-        print(f"Đang sử dụng proxy: {proxy['ip']}:{proxy['port']}")
+        # print(f"Đang sử dụng proxy: {proxy['ip']}:{proxy['port']}")
         
         # Tùy chọn cho seleniumwire
         return {
@@ -95,11 +95,11 @@ class Tiki_Consumer:
         try:
             # Kiểm tra cấu trúc message
             if 'url' not in message:
-                print(f"Lỗi: Message không chứa URL: {message}")
+                # print(f"Lỗi: Message không chứa URL: {message}")
                 return False
             
             url = message['url']
-            print(f"Đang xử lý URL: {url}")
+            # print(f"Đang xử lý URL: {url}")
             
             # TODO: Thực hiện các thao tác với URL ở đây
             # Ví dụ: crawl thông tin chi tiết sản phẩm từ URL
@@ -108,11 +108,11 @@ class Tiki_Consumer:
             time.sleep(2)
             
             # Giả sử quá trình xử lý thành công
-            print(f"Đã xử lý xong URL: {url}")
+            # print(f"Đã xử lý xong URL: {url}")
             return True
             
         except Exception as e:
-            print(f"Lỗi khi xử lý URL: {str(e)}")
+            # print(f"Lỗi khi xử lý URL: {str(e)}")
             return False
 
     
@@ -152,7 +152,7 @@ class Tiki_Consumer:
             return None
         
         except Exception as e:
-            print(f'Lỗi khi phân tích URL: {e}')
+            # print(f'Lỗi khi phân tích URL: {e}')
             return None
 
     
@@ -206,7 +206,7 @@ class Tiki_Consumer:
             
             return None
         except Exception as e:
-            print(f'Lỗi khi trích xuất thumbnail: {e}')
+            # print(f'Lỗi khi trích xuất thumbnail: {e}')
             return None
 
     
@@ -234,7 +234,7 @@ class Tiki_Consumer:
             
             return None
         except Exception as e:
-            print(f"Error extracting rating: {e}")
+            # print(f"Error extracting rating: {e}")
             return None
         
     
@@ -248,7 +248,7 @@ class Tiki_Consumer:
             
             return sales_quantity
         except Exception as e:
-            print(f"Error extracting product information: {e}")
+            # print(f"Error extracting product information: {e}")
             return None
         
     
@@ -261,7 +261,7 @@ class Tiki_Consumer:
             current_price = float(current_price_text.replace(".", ""))
             return current_price
         except Exception as e:
-            print(f"Error extracting current price: {e}")
+            # print(f"Error extracting current price: {e}")
             return None
         
     
@@ -278,7 +278,7 @@ class Tiki_Consumer:
                 # If no original price element found, return None or same as current price
                 return None
         except Exception as e:
-            print(f"Error extracting original price: {e}")
+            # print(f"Error extracting original price: {e}")
             return None
     
     
@@ -295,7 +295,7 @@ class Tiki_Consumer:
                 # If no discount element found, return 0
                 return 0
         except Exception as e:
-            print(f"Error extracting discount: {e}")
+            # print(f"Error extracting discount: {e}")
             return 0
 
     
@@ -444,7 +444,7 @@ class Tiki_Consumer:
             """)
             
             if result and (result.get('name') or result.get('link')):
-                print("Trích xuất seller thành công bằng JavaScript")
+                # print("Trích xuất seller thành công bằng JavaScript")
                 return result
         except Exception as js_error:
             print(f"JavaScript thất bại: {js_error}")
@@ -590,7 +590,7 @@ class Tiki_Consumer:
                 
             return False
         except Exception as e:
-            print(f"Lỗi khi kiểm tra trạng thái active: {e}")
+            # print(f"Lỗi khi kiểm tra trạng thái active: {e}")
             return False
 
     
@@ -605,7 +605,7 @@ class Tiki_Consumer:
             variant_categories = driver.find_elements(By.CSS_SELECTOR, "div[data-view-id='pdp_main_select_configuration']")
             
             # Kiểm tra và trả về số lượng danh mục tìm được
-            print(f"Tìm thấy {len(variant_categories)} danh mục tùy chọn")
+            # print(f"Tìm thấy {len(variant_categories)} danh mục tùy chọn")
             for category in variant_categories:
                 # Lấy tên danh mục
                 try:
@@ -629,7 +629,7 @@ class Tiki_Consumer:
                     try:
                         WebDriverWait(driver, 10).until(lambda d: self.wait_for_option_active(option))
                     except Exception as e:
-                        print(f"Timeout đợi option active: {e}")
+                        # print(f"Timeout đợi option active: {e}")
                         continue
                     
                     # Chờ để ảnh chính được cập nhật
@@ -682,7 +682,7 @@ class Tiki_Consumer:
                                     }
                                     option_list.append(option_info)
                                 except Exception as e:
-                                    print(f"Lỗi khi lấy ảnh lớn: {e}")
+                                    # print(f"Lỗi khi lấy ảnh lớn: {e}")
                                     # Nếu không tìm được ảnh lớn, thử lấy ảnh nhỏ từ option
                                     try:
                                         img_element = option.find_element(By.CSS_SELECTOR, "picture.webpimg-container img")
@@ -693,13 +693,13 @@ class Tiki_Consumer:
                                         }
                                         option_list.append(option_info)
                                     except Exception as e2:
-                                        print(f"Lỗi khi lấy ảnh nhỏ từ option: {e2}")
+                                        # print(f"Lỗi khi lấy ảnh nhỏ từ option: {e2}")
                                         option_list.append(option_text)
                         else:
                             # Nếu không có ảnh, chỉ thêm text
                             option_list.append(option_text)
                     except Exception as e:
-                        print(f"Lỗi khi trích xuất ảnh: {e}")
+                        # print(f"Lỗi khi trích xuất ảnh: {e}")
                         option_list.append(option_text)
                 
                 # Thêm danh sách text của các tùy chọn vào variant_categories
@@ -711,7 +711,7 @@ class Tiki_Consumer:
             return result
         
         except Exception as e:
-            print(f"Lỗi khi trích xuất danh mục tùy chọn: {e}")
+            # print(f"Lỗi khi trích xuất danh mục tùy chọn: {e}")
             return result
     
     
@@ -728,12 +728,12 @@ class Tiki_Consumer:
                 # Cuộn trang để tìm thông tin chi tiết
                 distance = random.randint(400, 600)
                 driver.execute_script(f"window.scrollBy(0, {distance});")
-                print(f"Scroll down lần {attempt+1}")
+                # print(f"Scroll down lần {attempt+1}")
                 time.sleep(1.5)
                 
                 # Tìm tất cả các container có thể chứa thông tin chi tiết
                 containers = driver.find_elements(By.CSS_SELECTOR, "div.sc-34e0efdc-0")
-                print(f"Tìm thấy {len(containers)} containers với class sc-34e0efdc-0")
+                # print(f"Tìm thấy {len(containers)} containers với class sc-34e0efdc-0")
                 
                 found_data_in_any_container = False
                 
@@ -746,10 +746,10 @@ class Tiki_Consumer:
                     
                     # Bỏ qua nếu đã xử lý container này rồi
                     if container_id in all_processed_containers:
-                        print(f"Bỏ qua container #{container_index+1} vì đã xử lý trước đó")
+                        # print(f"Bỏ qua container #{container_index+1} vì đã xử lý trước đó")
                         continue
                     
-                    print(f"Kiểm tra container #{container_index+1}")
+                    # print(f"Kiểm tra container #{container_index+1}")
                     all_processed_containers.add(container_id)
                     
                     # Kiểm tra tiêu đề
@@ -762,7 +762,7 @@ class Tiki_Consumer:
                         if len(title_elements) > 0:
                             title_found = True
                             title_text = title_elements[0].text
-                            print(f"Tìm thấy tiêu đề '{title_text}' bằng XPath")
+                            # print(f"Tìm thấy tiêu đề '{title_text}' bằng XPath")
                     except Exception as e:
                         print(f"Lỗi khi tìm tiêu đề bằng XPath: {e}")
                     
@@ -776,14 +776,14 @@ class Tiki_Consumer:
                                     if "Thông tin chi tiết" in title_el_text:
                                         title_found = True
                                         title_text = title_el_text
-                                        print(f"Tìm thấy tiêu đề '{title_text}' bằng class")
+                                        # print(f"Tìm thấy tiêu đề '{title_text}' bằng class")
                                         break
                     except Exception as e:
                         print(f"Lỗi khi tìm tiêu đề bằng class: {e}")
                     
                     # Tiếp tục nếu tìm thấy tiêu đề chứa "Thông tin chi tiết"
                     if title_found and "Thông tin chi tiết" in title_text:
-                        print(f"Đã xác nhận container #{container_index+1} chứa tiêu đề 'Thông tin chi tiết'")
+                        # print(f"Đã xác nhận container #{container_index+1} chứa tiêu đề 'Thông tin chi tiết'")
                         
                         # PHƯƠNG PHÁP 1: Tìm trong grid-template-columns
                         try:
@@ -796,7 +796,7 @@ class Tiki_Consumer:
                             if content_div:
                                 # Tìm tất cả grid div chứa thông tin
                                 grid_divs = content_div.find_elements(By.XPATH, ".//div[contains(@style, 'grid-template-columns')]")
-                                print(f"Tìm thấy {len(grid_divs)} grid div trong content")
+                                # print(f"Tìm thấy {len(grid_divs)} grid div trong content")
                                 
                                 for grid_div in grid_divs:
                                     spans = grid_div.find_elements(By.TAG_NAME, "span")
@@ -805,12 +805,12 @@ class Tiki_Consumer:
                                         value = spans[1].text.strip()
                                         
                                         if label and value:
-                                            print(f"Tìm thấy cặp từ grid: '{label}': '{value}'")
+                                            # print(f"Tìm thấy cặp từ grid: '{label}': '{value}'")
                                             result_text += f"{label}: {value}\n"
                                             found_data_in_any_container = True
                                 
                                 if found_data_in_any_container:
-                                    print("Đã trích xuất dữ liệu từ grid div!")
+                                    # print("Đã trích xuất dữ liệu từ grid div!")
                                     continue
                         except Exception as e:
                             print(f"Lỗi khi tìm trong grid: {e}")
@@ -823,7 +823,7 @@ class Tiki_Consumer:
                             else:
                                 detail_rows = container.find_elements(By.CSS_SELECTOR, "div.kAFhAU")
                                 
-                            print(f"Tìm thấy {len(detail_rows)} dòng chi tiết bằng class kAFhAU")
+                            # print(f"Tìm thấy {len(detail_rows)} dòng chi tiết bằng class kAFhAU")
                             
                             for row in detail_rows:
                                 # Bỏ qua nếu là benefit-item
@@ -839,14 +839,14 @@ class Tiki_Consumer:
                                         value = spans[1].text.strip()
                                         
                                         if label and value:
-                                            print(f"Tìm thấy cặp từ kAFhAU: '{label}': '{value}'")
+                                            # print(f"Tìm thấy cặp từ kAFhAU: '{label}': '{value}'")
                                             result_text += f"{label}: {value}\n"
                                             found_data_in_any_container = True
                                 except Exception as e:
                                     print(f"Lỗi khi tìm span trong kAFhAU: {e}")
                                     
                             if found_data_in_any_container:
-                                print("Đã trích xuất dữ liệu từ kAFhAU!")
+                                # print("Đã trích xuất dữ liệu từ kAFhAU!")
                                 continue
                         except Exception as e:
                             print(f"Lỗi khi tìm trong kAFhAU: {e}")
@@ -854,7 +854,7 @@ class Tiki_Consumer:
                         # PHƯƠNG PHÁP 3: Tìm span màu xám trực tiếp
                         try:
                             gray_spans = container.find_elements(By.XPATH, ".//span[contains(@style, 'color: rgb(128, 128, 137)')]")
-                            print(f"Tìm thấy {len(gray_spans)} span màu xám trong container")
+                            # print(f"Tìm thấy {len(gray_spans)} span màu xám trong container")
                             
                             for gray_span in gray_spans:
                                 label = gray_span.text.strip()
@@ -869,14 +869,14 @@ class Tiki_Consumer:
                                         if value_spans:
                                             value = value_spans[0].text.strip()
                                             if label and value:
-                                                print(f"Tìm thấy cặp từ span màu xám: '{label}': '{value}'")
+                                                # print(f"Tìm thấy cặp từ span màu xám: '{label}': '{value}'")
                                                 result_text += f"{label}: {value}\n"
                                                 found_data_in_any_container = True
                                 except Exception as e:
                                     print(f"Lỗi khi tìm giá trị cho span màu xám: {e}")
                                     
                             if found_data_in_any_container:
-                                print("Đã trích xuất dữ liệu từ span màu xám!")
+                                # print("Đã trích xuất dữ liệu từ span màu xám!")
                                 continue
                         except Exception as e:
                             print(f"Lỗi khi tìm span màu xám: {e}")
@@ -887,11 +887,11 @@ class Tiki_Consumer:
             
             # Kiểm tra và trả về kết quả
             if result_text != "Thông tin chi tiết:\n":
-                print("Đã tìm thấy thông tin chi tiết!")
+                # print("Đã tìm thấy thông tin chi tiết!")
                 return result_text
             
             # PHƯƠNG PHÁP CUỐI CÙNG: Thử sử dụng JavaScript trực tiếp tìm tất cả span màu xám
-            print("Thử phương pháp JavaScript cuối cùng...")
+            # print("Thử phương pháp JavaScript cuối cùng...")
             
             try:
                 js_result = driver.execute_script("""
@@ -922,7 +922,7 @@ class Tiki_Consumer:
                 """)
                 
                 if js_result:
-                    print("Tìm thấy dữ liệu bằng JavaScript cuối cùng!")
+                    # print("Tìm thấy dữ liệu bằng JavaScript cuối cùng!")
                     result_text += js_result
                     return result_text
             except Exception as e:
@@ -931,7 +931,7 @@ class Tiki_Consumer:
             return "Không tìm thấy thông tin chi tiết sản phẩm."
             
         except Exception as e:
-            print(f"Lỗi tổng thể khi trích xuất thông tin chi tiết: {e}")
+            # print(f"Lỗi tổng thể khi trích xuất thông tin chi tiết: {e}")
             return "Không tìm thấy thông tin chi tiết sản phẩm."
 
     
@@ -954,7 +954,7 @@ class Tiki_Consumer:
                     description_section = description_title.find_element(By.XPATH, "./..")
                     
                     if description_section:
-                        print(f"Đã tìm thấy phần Mô tả sản phẩm sau {attempt+1} lần thử")
+                        # print(f"Đã tìm thấy phần Mô tả sản phẩm sau {attempt+1} lần thử")
                         # Cuộn đến phần tử để đảm bảo nó được tải đầy đủ
                         driver.execute_script("arguments[0].scrollIntoView({block: 'start', behavior: 'smooth'});", description_section)
                         time.sleep(2)
@@ -963,7 +963,7 @@ class Tiki_Consumer:
                         try:
                             view_more_button = description_section.find_element(By.CSS_SELECTOR, "a.btn-more")
                             driver.execute_script("arguments[0].click();", view_more_button)
-                            print("Đã click nút Xem thêm")
+                            # print("Đã click nút Xem thêm")
                             time.sleep(2)  # Chờ nội dung hiển thị đầy đủ
                         except:
                             print("Không tìm thấy nút Xem thêm hoặc không cần click")
@@ -974,11 +974,11 @@ class Tiki_Consumer:
                     # Không tìm thấy, tiếp tục cuộn trang
                     distance = random.randint(400, 600)
                     driver.execute_script(f"window.scrollBy(0, {distance});")
-                    print(f"Scroll down lần {attempt+1}")
+                    # print(f"Scroll down lần {attempt+1}")
                     time.sleep(1.5)
             
             if not description_section:
-                print("Không tìm thấy phần Mô tả sản phẩm")
+                # print("Không tìm thấy phần Mô tả sản phẩm")
                 return "Không tìm thấy mô tả sản phẩm."
             
             # Tìm container nội dung mô tả
@@ -999,7 +999,7 @@ class Tiki_Consumer:
                 inner_div = content_div.find_element(By.CSS_SELECTOR, "div.sc-f5219d7f-0")
                 text_elements = inner_div.find_elements(By.XPATH, ".//h1 | .//h2 | .//h3 | .//h4 | .//h5 | .//p | .//li | .//span")
             
-            print(f"Tìm thấy {len(text_elements)} phần tử văn bản")
+            # print(f"Tìm thấy {len(text_elements)} phần tử văn bản")
             
             # Nối tất cả phần tử văn bản lại với nhau
             for element in text_elements:
@@ -1029,7 +1029,7 @@ class Tiki_Consumer:
             return result_text
             
         except Exception as e:
-            print(f"Lỗi khi trích xuất mô tả sản phẩm: {e}")
+            # print(f"Lỗi khi trích xuất mô tả sản phẩm: {e}")
             return f"Lỗi khi trích xuất mô tả sản phẩm: {e}"
 
     
@@ -1043,7 +1043,7 @@ class Tiki_Consumer:
             
             # Nếu tìm thấy phần tử, sản phẩm đã hết hàng
             if out_of_stock_element:
-                print("Sản phẩm đã hết hàng!")
+                # print("Sản phẩm đã hết hàng!")
                 return True
                 
         except Exception:
@@ -1059,19 +1059,19 @@ class Tiki_Consumer:
             driver = self.setup_driver(proxy)
             try:
                 # Mở trang sản phẩm
-                print("Đang truy cập trang sản phẩm...")
+                # print("Đang truy cập trang sản phẩm...")
                 driver.get(product_url)
                 WebDriverWait(driver, 61).until(
                     EC.presence_of_element_located((By.TAG_NAME, "body"))
                 )
-                print("Truy cập thành công, thu thập dữ liệu")
+                # print("Truy cập thành công, thu thập dữ liệu")
                 
                 # Kiểm tra xem sản phẩm có hết hàng không
                 if self.is_product_out_of_stock(driver):
                     print("Bỏ qua sản phẩm này vì đã hết hàng")
                     break
                 
-                print("Trích xuất id sản phẩm")
+                # print("Trích xuất id sản phẩm")
                 product_id = self.extract_product_id_from_tiki_url(product_url)
                 # print("Tạo vùng lưu trữ ảnh sản phẩm")
                 # create_tiki_images_folder(product_id, "C:/Users/DELL/Desktop/e-commerce-crawler/data/tiki/images")
@@ -1098,15 +1098,15 @@ class Tiki_Consumer:
                 return product_json
 
             except TimeoutException:
-                print("Không tải được trang sản phẩm")
-                print("Thử lại...")
+                # print("Không tải được trang sản phẩm")
+                # print("Thử lại...")
                 continue
             finally:
                 # Đảm bảo đóng driver
                 if driver:
                     try:
                         driver.quit()
-                        print("Đã đóng trình duyệt")
+                        # print("Đã đóng trình duyệt")
                     except Exception as e:
                         print(f"Lỗi khi đóng trình duyệt: {str(e)}")
 
@@ -1125,11 +1125,11 @@ class Tiki_Consumer:
         
         # Kết nối đến RabbitMQ
         if not rabbitmq.connect():
-            print("Không thể kết nối tới RabbitMQ")
+            # print("Không thể kết nối tới RabbitMQ")
             return
         
         try:
-            print("Consumer đã khởi động. Đang đợi messages...")
+            # print("Consumer đã khởi động. Đang đợi messages...")
             
             # Vòng lặp vô hạn để tiếp tục lấy và xử lý messages
             while True:
@@ -1137,7 +1137,7 @@ class Tiki_Consumer:
                 message_count = rabbitmq.count_messages()
                 
                 if message_count > 0:
-                    print(f"Có {message_count} messages trong queue")
+                    # print(f"Có {message_count} messages trong queue")
                     
                     # Lấy và xử lý một message
                     message = rabbitmq.get_one_message(auto_ack=True)
@@ -1145,95 +1145,20 @@ class Tiki_Consumer:
                     if message and 'message' in message and 'url' in message['message']:
                         url = message['message']['url']
                         # print(url)
-                        print("Bắt đầu thu thập dữ liệu sản phẩm")
+                        # print("Bắt đầu thu thập dữ liệu sản phẩm")
                         product_infomation = self.crawl_product_infomation(url)
                         product_infomation = json.dumps(product_infomation, indent=4, ensure_ascii=False)
                         print(product_infomation)
                     else:
-                        print("Không thể xử lý message, sẽ thử lại sau")
+                        # print("Không thể xử lý message, sẽ thử lại sau")
                         time.sleep(5)
 
                     break # Nhớ xoá đi để đảm bảo có thể lấy dữ liệu liên tục
                 else:
-                    print("Không có message nào trong queue. Đợi dữ liệu...")
+                    # print("Không có message nào trong queue. Đợi dữ liệu...")
                     time.sleep(30)
                 
         except KeyboardInterrupt:
             print("\nNgười dùng dừng chương trình")
         finally:
             rabbitmq.close()
-
-
-
-def consumer_worker(consumer_id, api_key):
-    print(f"Consumer #{consumer_id} đang khởi động với API key: {api_key}")
-    consumer = Tiki_Consumer(api_key)
-    
-    try:
-        # Thêm thời gian ngẫu nhiên trước khi khởi động để tránh xung đột
-        delay = random.uniform(1.0, 5.0)
-        time.sleep(delay)
-        
-        # Chạy consumer
-        consumer.run()
-    except Exception as e:
-        print(f"Consumer #{consumer_id} gặp lỗi: {str(e)}")
-    finally:
-        print(f"Consumer #{consumer_id} đã kết thúc")
-
-
-def main():
-    """
-    Hàm main khởi tạo và quản lý 10 consumer chạy đa luồng
-    """
-    # Danh sách API key (thay thế bằng danh sách key thực của bạn)
-    api_keys = [
-        "BxHgfeqJKsNPAclVQnBfmD",  # Key mặc định từ mã nguồn gốc
-        "hgvOiDXwraQZOjvKwRUehk"
-    ]
-    
-    # Số lượng consumer cần chạy
-    num_consumers = 2
-    
-    # Danh sách các luồng
-    threads = []
-    
-    # Tạo và khởi động các luồng consumer
-    for i in range(num_consumers):
-        # Lấy API key từ danh sách, sử dụng modulo để lặp lại nếu số consumer > số key
-        api_key = api_keys[i % len(api_keys)]
-        
-        # Tạo luồng cho consumer
-        thread = threading.Thread(
-            target=consumer_worker,
-            args=(i + 1, api_key),
-            name=f"Consumer-{i+1}"
-        )
-        
-        # Thêm vào danh sách và khởi động
-        threads.append(thread)
-        thread.start()
-        print(f"Đã khởi động Consumer #{i+1} với key: {api_key}")
-        
-        # Chờ một chút trước khi khởi động consumer tiếp theo
-        time.sleep(1)
-    
-    # Chờ tất cả các consumer hoàn thành (tùy chọn)
-    # Thông thường trong ứng dụng thực tế, bạn có thể muốn chương trình chạy mãi mãi
-    # cho đến khi bị dừng bởi người dùng (Ctrl+C) hoặc một cơ chế dừng khác
-    try:
-        print("Tất cả consumer đã được khởi động. Nhấn Ctrl+C để dừng...")
-        
-        # Đợi tất cả các luồng hoàn thành 
-        for thread in threads:
-            thread.join()
-            
-    except KeyboardInterrupt:
-        print("\nĐang dừng tất cả consumer...")
-        # Lưu ý: Việc dừng các luồng không phải là trực tiếp trong Python
-        # Các worker sẽ kết thúc khi consumer.run() kết thúc hoặc gặp lỗi
-    
-    print("Tất cả consumer đã kết thúc")
-
-if __name__ == "__main__":
-    main()

@@ -1,9 +1,11 @@
+version: '3'
+
 services:
   # RabbitMQ cho Tiki
-  tiki_rabitmq:
+  tiki_rabbitmq:
     image: rabbitmq:3-management
-    container_name: tiki_rabitmq
-    hostname: tiki_rabitmq
+    container_name: tiki_rabbitmq
+    hostname: tiki_rabbitmq
     ports:
       - "5672:5672"   # AMQP port
       - "15672:15672" # Management UI
@@ -11,10 +13,10 @@ services:
       - RABBITMQ_DEFAULT_USER=admin
       - RABBITMQ_DEFAULT_PASS=admin
     volumes:
-      - tiki_rabitmq_data:/var/lib/rabbitmq
+      - tiki_rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq-init.sh:/docker-entrypoint-initdb.d/rabbitmq-init.sh
     networks:
-      - tiki_rabitmq_network
+      - tiki_network
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
       interval: 30s
@@ -25,20 +27,116 @@ services:
   queue_setup:
     image: rabbitmq:3-management
     depends_on:
-      tiki_rabitmq:
+      tiki_rabbitmq:
         condition: service_healthy
     networks:
-      - tiki_rabitmq_network
+      - tiki_network
     entrypoint: >
       /bin/bash -c "
         sleep 10 &&
-        rabbitmqadmin --host=tiki_rabitmq --user=admin --password=admin declare queue name=tiki_product_queue durable=true &&
+        rabbitmqadmin --host=tiki_rabbitmq --user=admin --password=admin declare queue name=tiki_product_queue durable=true &&
         echo 'Queue tiki_product_queue created successfully'
       "
 
+  # PostgreSQL cho Airflow
+  postgres:
+    image: postgres:13
+    container_name: tiki_postgres
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tiki_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Airflow Webserver
+  airflow-webserver:
+    build: ./airflow
+    container_name: tiki_airflow_webserver
+    depends_on:
+      postgres:
+        condition: service_healthy
+      tiki_rabbitmq:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW_HOME=/opt/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./tiki:/opt/airflow/tiki
+      - ./logs:/opt/airflow/logs
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    command: webserver
+    ports:
+      - "8080:8080"
+    networks:
+      - tiki_network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    build: ./airflow
+    container_name: tiki_airflow_scheduler
+    depends_on:
+      airflow-webserver:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION=False
+      - AIRFLOW_HOME=/opt/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./tiki:/opt/airflow/tiki
+      - ./logs:/opt/airflow/logs
+      - ./requirements.txt:/opt/airflow/requirements.txt
+    command: scheduler
+    networks:
+      - tiki_network
+
+  # Tiki Consumer Service (runs continuously)
+  tiki-consumer:
+    build: ./consumer
+    container_name: tiki_consumer
+    depends_on:
+      tiki_rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./tiki:/app/tiki
+      - ./data:/app/data
+    environment:
+      - RABBITMQ_HOST=tiki_rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASS=admin
+      - RABBITMQ_QUEUE=tiki_product_queue
+      - API_PROXY_KEY=BxHgfeqJKsNPAclVQnBfmD
+    networks:
+      - tiki_network
+    command: python -m tiki.__main__
+    restart: always
+
 volumes:
-  tiki_rabitmq_data:
+  tiki_rabbitmq_data:
+  postgres_data:
 
 networks:
-  tiki_rabitmq_network:
+  tiki_network:
     driver: bridge
