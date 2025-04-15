@@ -315,7 +315,7 @@ def click_view_more_button(driver, num_clicks=3):
 def crawl_tiki_product_list():
     """Hàm chính để crawl danh sách sản phẩm"""
 
-    api_key = "BxHgfeqJKsNPAclVQnBfmD"
+    api_key = "NyxJWWXmIqJrTHhcQkDXiK"
     proxy_manager = RotatingProxy(api_key)
 
     # Khởi tạo kết nối RabbitMQ

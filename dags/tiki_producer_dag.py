@@ -42,6 +42,3 @@ crawl_task = PythonOperator(
     python_callable=run_tiki_producer,
     dag=dag,
 )
-
-# Task dependencies (not needed for single task)
-# crawl_task
