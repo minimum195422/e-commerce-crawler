@@ -157,6 +157,7 @@ class Tiki_Consumer:
 
     
     def create_tiki_images_folder(self, product_id):
+        has_folder = False
         # Tạo tên thư mục
         folder_name = f"tiki_{product_id}"
         
@@ -169,8 +170,9 @@ class Tiki_Consumer:
             print(f"Đã tạo thư mục: {folder_path}")
         else:
             print(f"Thư mục đã tồn tại: {folder_path}")
+            has_folder = True
             
-        return folder_path
+        return has_folder
 
    
     def extract_thumbnail_url_from_driver(self, driver):
@@ -1069,12 +1071,15 @@ class Tiki_Consumer:
                 # Kiểm tra xem sản phẩm có hết hàng không
                 if self.is_product_out_of_stock(driver):
                     print("Bỏ qua sản phẩm này vì đã hết hàng")
-                    break
+                    return None
                 
                 # print("Trích xuất id sản phẩm")
                 product_id = self.extract_product_id_from_tiki_url(product_url)
                 # print("Tạo vùng lưu trữ ảnh sản phẩm")
-                # create_tiki_images_folder(product_id, "C:/Users/DELL/Desktop/e-commerce-crawler/data/tiki/images")
+                has_folder = self.create_tiki_images_folder(product_id, "C:/Users/DELL/Desktop/e-commerce-crawler/data/tiki/images")
+                if has_folder:
+                    print("Sản phẩm trùng lặp bỏ qua sản phẩm")
+                    return None
 
                 # Tiếp tục thu thập dữ liệu nếu sản phẩm còn hàng
                 # print(extract_product_id_from_tiki_url(product_url))
@@ -1147,8 +1152,8 @@ class Tiki_Consumer:
                         # print(url)
                         # print("Bắt đầu thu thập dữ liệu sản phẩm")
                         product_infomation = self.crawl_product_infomation(url)
-                        product_infomation = json.dumps(product_infomation, indent=4, ensure_ascii=False)
-                        print(product_infomation)
+                        if product_infomation == None:
+                            continue
                     else:
                         # print("Không thể xử lý message, sẽ thử lại sau")
                         time.sleep(5)
