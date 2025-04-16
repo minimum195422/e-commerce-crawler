@@ -9,7 +9,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from tiki.proxy import RotatingProxy
+from proxy import RotatingProxy
 from rabbitmq_connector import RabbitMQConnector
 
 def setup_proxy_option(proxy):

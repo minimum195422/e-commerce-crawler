@@ -1,3 +1,5 @@
+version: '3'
+
 services:
   # RabbitMQ cho Tiki
   tiki_rabbitmq:
@@ -36,90 +38,86 @@ services:
         echo 'Queue tiki_product_queue created successfully'
       "
 
-  # Airflow + Python app trong một container
-  tiki_app:
-    image: python:3.10-slim
-    container_name: tiki_app
-    depends_on:
-      tiki_rabbitmq:
-        condition: service_healthy
-    volumes:
-      - ./tiki:/app/tiki
-      - ./dags:/app/dags
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./requirements.txt:/app/requirements.txt
+  postgres:
+    image: postgres:13
     environment:
-      - AIRFLOW_HOME=/app/airflow
-      - RABBITMQ_HOST=tiki_rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASS=admin
-      - RABBITMQ_QUEUE=tiki_product_queue
-      - API_PROXY_KEY=BxHgfeqJKsNPAclVQnBfmD
-    working_dir: /app
-    ports:
-      - "8080:8080"   # Airflow UI
-    command: >
-      bash -c "
-        apt-get update && 
-        apt-get install -y --no-install-recommends wget gnupg unzip curl chromium chromium-driver && 
-        apt-get clean && 
-        rm -rf /var/lib/apt/lists/* &&
-        pip install --no-cache-dir -r requirements.txt &&
-        mkdir -p /app/data/tiki/images &&
-        mkdir -p /app/airflow/dags &&
-        ln -sf /app/dags/* /app/airflow/dags/ &&
-        export CHROME_BIN=/usr/bin/chromium &&
-        export CHROMEDRIVER_PATH=/usr/bin/chromedriver &&
-        airflow db init &&
-        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com &&
-        (nohup airflow scheduler > /app/logs/scheduler.log 2>&1 &) &&
-        (nohup airflow webserver > /app/logs/webserver.log 2>&1 &) &&
-        python -m tiki.__main__
-      "
-    networks:
-      - tiki_network
-    restart: always
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 5
 
-  # Tiki Consumer Service (chỉ chạy consumer nếu cần thêm instances)
-  tiki_consumer:
-    image: python:3.10-slim
-    container_name: tiki_consumer
+  airflow-init:
+    image: apache/airflow:2.6.3-python3.9
     depends_on:
-      tiki_rabbitmq:
+      postgres:
         condition: service_healthy
-    volumes:
-      - ./tiki:/app/tiki
-      - ./data:/app/data
-      - ./requirements.txt:/app/requirements.txt
     environment:
-      - RABBITMQ_HOST=tiki_rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASS=admin
-      - RABBITMQ_QUEUE=tiki_product_queue
-      - API_PROXY_KEY=BxHgfeqJKsNPAclVQnBfmD
-    working_dir: /app
-    command: >
-      bash -c "
-        apt-get update && 
-        apt-get install -y --no-install-recommends wget gnupg unzip curl chromium chromium-driver && 
-        apt-get clean && 
-        rm -rf /var/lib/apt/lists/* &&
-        pip install --no-cache-dir -r requirements.txt &&
-        mkdir -p /app/data/tiki/images &&
-        export CHROME_BIN=/usr/bin/chromium &&
-        export CHROMEDRIVER_PATH=/usr/bin/chromedriver &&
-        python -m tiki.__main__
-      "
-    networks:
-      - tiki_network
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        airflow db init
+        airflow users create \
+          --username admin \
+          --firstname FIRST_NAME \
+          --lastname LAST_NAME \
+          --role Admin \
+          --email admin@example.com \
+          --password admin
+
+  webserver:
+    image: apache/airflow:2.6.3-python3.9
     restart: always
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=temporary_secret_key_for_dev
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  scheduler:
+    image: apache/airflow:2.6.3-python3.9
+    restart: always
+    depends_on:
+      - postgres
+      - airflow-init
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    command: scheduler
 
 volumes:
   tiki_rabbitmq_data:
-
+  postgres-db-volume:
+  
 networks:
   tiki_network:
     driver: bridge
